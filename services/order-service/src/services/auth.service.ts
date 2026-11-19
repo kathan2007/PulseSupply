@@ -100,6 +100,7 @@ export class AuthService {
 
   private static generateToken(payload: AuthenticatedUser): string {
     return jwt.sign(payload, config.jwt.secret, {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expiresIn: config.jwt.expiresIn as any,
     });
   }

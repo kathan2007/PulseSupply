@@ -22,8 +22,7 @@ COPY tsconfig.json ./
 COPY src ./src
 
 # Generate Prisma Client & Compile TypeScript
-RUN npx prisma generate
-RUN npm run build
+RUN npx prisma generate && npm run build
 
 # Stage 2: Production runner stage
 FROM node:20-alpine AS runner
@@ -56,10 +55,7 @@ COPY --from=builder /app/dist ./dist
 
 # Copy entrypoint script
 COPY scripts/entrypoint.sh ./scripts/entrypoint.sh
-RUN chmod +x ./scripts/entrypoint.sh
-
-# Set ownership to non-root user
-RUN chown -R appuser:appgroup /app
+RUN chmod +x ./scripts/entrypoint.sh && chown -R appuser:appgroup /app
 
 USER appuser
 

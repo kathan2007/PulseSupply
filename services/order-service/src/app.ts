@@ -49,8 +49,9 @@ if (analyticsUrl) {
       });
       const data = await response.json();
       res.status(response.status).json(data);
-    } catch (err: any) {
-      res.status(502).json({ error: 'Analytics service unreachable', details: err.message });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(502).json({ error: 'Analytics service unreachable', details: message });
     }
   });
 }
