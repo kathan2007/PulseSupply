@@ -1,0 +1,181 @@
+services:
+  # ==========================================
+  # Nginx API Gateway & Reverse Proxy
+  # ==========================================
+  nginx-proxy:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    image: pulsesupply/nginx-gateway:latest
+    container_name: pulsesupply-nginx-gateway
+    restart: unless-stopped
+    ports:
+      - "${NGINX_PORT_HTTP:-80}:80"
+      - "${NGINX_PORT_HTTPS:-443}:443"
+    volumes:
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      frontend:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      analytics-service:
+        condition: service_healthy
+    networks:
+      - frontend-net
+      - backend-net
+
+  # ==========================================
+  # Frontend Service (Next.js in Nginx Alpine)
+  # ==========================================
+  frontend:
+    build:
+      context: ./services/frontend
+      dockerfile: Dockerfile
+    image: pulsesupply/frontend:latest
+    container_name: pulsesupply-frontend
+    restart: unless-stopped
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-/api}
+    networks:
+      - frontend-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # ==========================================
+  # Order & Auth Service (Node.js/Express + Prisma)
+  # ==========================================
+  order-service:
+    build:
+      context: ./services/order-service
+      dockerfile: Dockerfile
+    image: pulsesupply/order-service:latest
+    container_name: pulsesupply-order-service
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=4000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-pulsegateway}:${POSTGRES_PASSWORD:-pulsesupply_secure_pass_2026}@postgres-db:5432/${POSTGRES_DB:-pulsesupply_db}?schema=public
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-pulsesupply_redis_auth_2026}@redis:6379/0
+      - JWT_SECRET=${JWT_SECRET:-super_secret_jwt_key_at_least_32_characters_long_for_security}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-24h}
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend-net
+      - db-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:4000/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ==========================================
+  # Analytics & Report Engine (Python FastAPI)
+  # ==========================================
+  analytics-service:
+    build:
+      context: ./services/analytics-service
+      dockerfile: Dockerfile
+    image: pulsesupply/analytics-service:latest
+    container_name: pulsesupply-analytics-service
+    restart: unless-stopped
+    environment:
+      - PYTHON_ENV=${PYTHON_ENV:-production}
+      - PORT=8000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-pulsegateway}:${POSTGRES_PASSWORD:-pulsesupply_secure_pass_2026}@postgres-db:5432/${POSTGRES_DB:-pulsesupply_db}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-pulsesupply_redis_auth_2026}@redis:6379/0
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend-net
+      - db-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ==========================================
+  # Relational Database (PostgreSQL)
+  # Isolated in db-net ONLY
+  # ==========================================
+  postgres-db:
+    image: postgres:16-alpine
+    container_name: pulsesupply-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pulsegateway}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pulsesupply_secure_pass_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-pulsesupply_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - db-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  # ==========================================
+  # In-Memory Cache & Message Queue (Redis)
+  # ==========================================
+  redis:
+    image: redis:7.2-alpine
+    container_name: pulsesupply-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-pulsesupply_redis_auth_2026}
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-pulsesupply_redis_auth_2026}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+# ==========================================
+# Three Isolated Bridge Networks
+# ==========================================
+networks:
+  frontend-net:
+    driver: bridge
+    internal: false
+  backend-net:
+    driver: bridge
+    internal: false
+  db-net:
+    driver: bridge
+    internal: true
+
+# ==========================================
+# Persistent Volumes
+# ==========================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+

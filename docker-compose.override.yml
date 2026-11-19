@@ -1,0 +1,44 @@
+# ==========================================
+# docker-compose.override.yml  — LOCAL DEV MODE
+# This file is automatically merged with docker-compose.yml
+# by Docker Compose. It overrides service settings for fast
+# hot-reload development without rebuilding images.
+# DO NOT commit local secrets — use .env file only.
+# ==========================================
+
+services:
+  # Hot-reload order service using ts-node-dev
+  # Overrides the production entrypoint to skip migration (run manually)
+  order-service:
+    build:
+      context: ./services/order-service
+      dockerfile: Dockerfile
+    volumes:
+      - ./services/order-service/src:/app/src:ro
+      - ./services/order-service/prisma:/app/prisma:ro
+    environment:
+      - NODE_ENV=development
+    entrypoint: ["dumb-init", "--"]
+    command: ["npm", "run", "dev"]
+
+  # Hot-reload analytics service using uvicorn --reload
+  analytics-service:
+    build:
+      context: ./services/analytics-service
+      dockerfile: Dockerfile
+    volumes:
+      - ./services/analytics-service/app:/app/app:ro
+    environment:
+      - PYTHON_ENV=development
+      - LOG_LEVEL=DEBUG
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  # Expose Postgres port locally for Prisma Studio / TablePlus
+  postgres-db:
+    ports:
+      - "5432:5432"
+
+  # Expose Redis port locally for redis-cli inspection
+  redis:
+    ports:
+      - "6379:6379"
