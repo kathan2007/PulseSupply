@@ -51,12 +51,12 @@ services:
   # ===================================================
   # 3. Frontend Web Application (Next.js Static Site on Global CDN)
   # ===================================================
-  - type: static
+  - type: web
     name: pulsesupply-frontend
-    plan: free
+    runtime: static
     rootDir: services/frontend
     buildCommand: npm install && npm run build
-    publishPath: out
+    staticPublishPath: ./out
     routes:
       - type: rewrite
         source: /*

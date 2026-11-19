@@ -10,7 +10,10 @@ import {
   OrderVelocity,
 } from '../types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || '/api';
+const API_BASE = (rawApiUrl && !rawApiUrl.startsWith('http') && !rawApiUrl.startsWith('/'))
+  ? `https://${rawApiUrl}${rawApiUrl.endsWith('/api') ? '' : '/api'}`
+  : (rawApiUrl.endsWith('/api') || rawApiUrl === '/api' ? rawApiUrl : `${rawApiUrl.replace(/\/$/, '')}/api`);
 
 const STORAGE_KEYS = {
   TOKEN: 'pulsesupply_auth_token_v3',
