@@ -21,6 +21,23 @@ if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('combined'));
 }
 
+// Root endpoint
+app.get('/', (_req: Request, res: Response) => {
+  res.status(200).json({
+    status: 'healthy',
+    service: 'PulseSupply Enterprise Order & Auth API',
+    endpoints: {
+      health: '/healthz',
+      auth: '/api/v1/auth',
+      products: '/api/v1/products',
+      orders: '/api/v1/orders',
+      inventory: '/api/v1/inventory',
+      analytics: '/api/v1/analytics',
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Liveness & Readiness probe
 app.get('/healthz', (_req: Request, res: Response) => {
   res.status(200).json({
